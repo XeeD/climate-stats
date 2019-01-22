@@ -23,6 +23,10 @@ case class GaismaLocation(path: String, name: String) extends GaismaPageDescript
   def toUri = Site.url(path)
 }
 
+object GaismaLocation {
+  def isLocationPath(path: String) = path.startsWith("/location/")
+}
+
 sealed trait GaismaDocument[+ParsedEntity <: StatsEntity] {
   def htmlBody: String
 
@@ -34,10 +38,7 @@ case class GaismaRegionDocument(continent: GaismaRegion, htmlBody: String) exten
     val document = Jsoup.parse(htmlBody)
     val links = document.select("#a a").asScala.map(link =>
       (Site.extractPath(link.attr("href")), link.text())
-    ).map({
-      case (url, name) if url.startsWith("/location/") => GaismaLocation(url, name)
-      case (url, name) => GaismaRegion(url, name)
-    })
+    )
     RegionData(
       continent,
       links.toList
@@ -69,7 +70,7 @@ object GaismaLocationDocument {
 
 sealed trait StatsEntity
 
-case class RegionData(region: GaismaRegion, links: collection.immutable.Iterable[GaismaPageDescriptor]) extends StatsEntity
+case class RegionData(region: GaismaRegion, links: collection.immutable.Iterable[(String, String)]) extends StatsEntity
 
 case class LocationData(name: String, worldLocation: Seq[String], sunlightTable: Map[Any, Any]) extends StatsEntity {
   override def toString: String = s"${name} (${worldLocation.mkString(" -> ")})"
