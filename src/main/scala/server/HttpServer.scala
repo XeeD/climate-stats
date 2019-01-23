@@ -26,14 +26,19 @@ object HttpServer {
         complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
       }
     } ~
-    path("test-city-scrape") {
-      get {
-        complete(gaismaService.scrapeCity("/location/gibraltar.html", "Gibraltar"))
-      }
-    } ~
+      path("test-city-scrape") {
+        get {
+          complete(gaismaService.scrapeCity("/location/gibraltar.html", "Gibraltar"))
+        }
+      } ~
       path("scrape-site") {
         get {
           complete(gaismaService.scrapeSite())
+        }
+      } ~
+      path("location" / Segment) { locationId =>
+        get {
+          complete(gaismaService.getLocation(locationId))
         }
       }
 

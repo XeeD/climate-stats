@@ -48,15 +48,37 @@ case class GaismaRegionDocument(continent: GaismaRegion, htmlBody: String) exten
 
 case class GaismaLocationDocument(location: GaismaLocation, htmlBody: String) extends GaismaDocument[LocationData] {
 
+  val ExtractIdPattern = "pref-home-location=(.+)$".r.unanchored
+
   def parse: LocationData = {
     val document = Jsoup.parse(this.htmlBody)
     val worldLocation = document.select(".hdr+ small a").asScala.map(_.text())
     val title = document.title()
 
+    val basicInformation = document
+      .select("#basic-information+ .data div")
+      .html()
+      .split("<br>")
+      .map(Jsoup.parseBodyFragment(_))
+      .map(_.text().split(':').toList)
+      .collect {
+        case List(name, value) => name.trim -> value.trim
+      }
+      .toMap
+
+    val id = document
+      .selectFirst("#sun-data-tables+ .note a")
+      .attr("href") match {
+      case ExtractIdPattern(id) => id
+      case _ => "Unknown"
+    }
+
     LocationData(
+      id = id,
       name = title.takeWhile(_ != ','),
       worldLocation = worldLocation,
-      sunlightTable = sunlightFromTableRows(document.select("#future-days-table tr"))
+      sunlightTable = sunlightFromTableRows(document.select("#future-days-table tr")),
+      basicInformation = basicInformation
     )
   }
 }
@@ -72,6 +94,20 @@ sealed trait StatsEntity
 
 case class RegionData(region: GaismaRegion, links: collection.immutable.Iterable[(String, String)]) extends StatsEntity
 
-case class LocationData(name: String, worldLocation: Seq[String], sunlightTable: Map[Any, Any]) extends StatsEntity {
-  override def toString: String = s"${name} (${worldLocation.mkString(" -> ")})"
+case class LocationData(
+  id: String,
+  name: String,
+  worldLocation: Seq[String],
+  basicInformation: Map[String, String],
+  sunlightTable: Map[Any, Any]) extends StatsEntity {
+
+  override def toString: String = s"${id}: ${name} (${worldLocation.mkString(" -> ")})"
+
+  def gpsInfo = {
+    for {
+      latitude <- basicInformation.get("Latitude")
+      longitude <- basicInformation.get("Longitude")
+      distance <- basicInformation.get("Distance")
+    } yield s"Position ${latitude} ${longitude} (${distance}"
+  }
 }

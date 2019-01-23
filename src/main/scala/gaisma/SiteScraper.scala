@@ -1,7 +1,6 @@
 package gaisma
 
-import akka.NotUsed
-import akka.actor.Actor
+import akka.actor.{Actor, ActorRef}
 import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
@@ -10,6 +9,8 @@ import akka.stream.scaladsl._
 import akka.util.ByteString
 
 import scala.concurrent.Future
+
+case class ScrapeSite(locationStore: ActorRef)
 
 class SiteScraper extends Actor {
 
@@ -20,16 +21,30 @@ class SiteScraper extends Actor {
   val http = Http(context.system)
 
   def receive = {
-    case "scrapeSite" => scrapeSite()
+    case ScrapeSite(locationStore) => scrapeSite(locationStore)
   }
 
-  def scrapeSite() = {
+  def scrapeSite(locationStore: ActorRef) = {
     Source.single(GaismaRegion("/dir/001-continent.html", "World"))
       .via(regionFeedbackFlow)
       .mapAsyncUnordered(20)(fetch(_)(GaismaLocationDocument(_, _)))
       .map(_.parse).async
-      .runForeach(location => log.info(s"Result ${location}"))
+      .runWith {
+        Sink.combine(
+          logResults,
+          saveResults(locationStore)
+        )(Broadcast[LocationData](_))
+      }
+
   }
+
+  val logResults = Sink.foreach[LocationData](location =>
+    log.info(
+      s"Result ${location}\n${location.gpsInfo.getOrElse("")}")
+  )
+
+  def saveResults(locationStore: ActorRef) =
+    Sink.actorRef[LocationData](locationStore, onCompleteMessage = "done")
 
   val regionFeedbackFlow = GraphDSL.create() { implicit builder =>
     import GraphDSL.Implicits._

@@ -10,6 +10,7 @@ class GaismaService(implicit system: ActorSystem, implicit val timeout: Timeout)
   implicit val ec: ExecutionContext = system.dispatcher
   val cityScraperActor = system.actorOf(Props[LocationScraper])
   val siteScraperActor = system.actorOf(Props[SiteScraper])
+  val locationStoreActor = system.actorOf(Props[LocationStore])
 
   def scrapeCity(url: String, name: String): Future[String] = {
     val city = GaismaLocation(url, name)
@@ -21,8 +22,18 @@ class GaismaService(implicit system: ActorSystem, implicit val timeout: Timeout)
     })
   }
 
+  def getLocation(locationId: String): Future[String] = {
+    (locationStoreActor ? RetrieveLocation(locationId))
+      .map({
+        case Some(result) => result match {
+          case locationData: LocationData => locationData.toString
+        }
+        case None => "Not found"
+      })
+  }
+
   def scrapeSite(): String = {
-    siteScraperActor ! "scrapeSite"
+    siteScraperActor ! ScrapeSite(locationStoreActor)
     "Scraping started"
   }
 }
